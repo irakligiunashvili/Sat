@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Sat</string>
+    <string name="title_activity_main">Sat</string>
+    <string name="package_name">to.home.sat</string>
+    <string name="custom_url_scheme">to.home.sat</string>
+</resources>
