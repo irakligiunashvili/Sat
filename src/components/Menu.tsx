@@ -34,7 +34,7 @@ export function Menu({
       {open && (
         <>
           <button type="button" className="menu-backdrop" aria-label="Close menu" onClick={close} />
-          <div className="menu-panel glass">
+          <div className="menu-panel">
             <div className="menu-logo">
               <SatMark ink="#1e2830" size={34} />
             </div>

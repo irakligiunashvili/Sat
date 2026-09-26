@@ -243,7 +243,7 @@ button { cursor: pointer; }
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.85), 0 6px 16px rgba(36, 52, 68, 0.06);
 }
 .chip.is-on, .cat.is-on { background: #1e2830; color: #f6f3ee; }
-.cat-icon { width: 16px; height: 16px; display: block; }
+.cat-icon { font-size: 18px; line-height: 1; display: block; }
 .error { color: #9c3b2e; margin: 0 0 8px; }
 .btn {
   border: 0;
@@ -265,7 +265,7 @@ button { cursor: pointer; }
 
 .topbar {
   position: absolute;
-  z-index: 520;
+  z-index: 870;
   top: max(12px, env(safe-area-inset-top));
   left: 12px;
   right: 12px;
@@ -282,8 +282,10 @@ button { cursor: pointer; }
   gap: 5px;
   place-content: center;
   flex: none;
-  position: relative;
-  z-index: 860;
+  position: fixed;
+  z-index: 880;
+  top: max(12px, env(safe-area-inset-top));
+  left: 12px;
 }
 .menu-btn i {
   display: block;
@@ -303,14 +305,19 @@ button { cursor: pointer; }
 .menu-panel {
   position: fixed;
   z-index: 850;
-  top: max(68px, calc(env(safe-area-inset-top) + 60px));
-  left: 12px;
-  width: min(300px, calc(100% - 24px));
-  border-radius: 22px;
-  padding: 16px;
+  top: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  height: min(62vh, 560px);
+  border-radius: 0 0 28px 28px;
+  padding: max(76px, calc(env(safe-area-inset-top) + 68px)) 22px 24px;
   display: grid;
-  gap: 10px;
-  background: rgba(246, 247, 244, 0.96);
+  align-content: start;
+  gap: 12px;
+  overflow: auto;
+  background: #fff;
+  box-shadow: 0 16px 40px rgba(30, 40, 48, 0.14);
 }
 .menu-logo { padding: 2px 4px 0; }
 .menu-lead { margin: 0; }
@@ -321,14 +328,15 @@ button { cursor: pointer; }
   text-align: left;
   border: 0;
   border-radius: 14px;
-  padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.42);
+  padding: 14px 16px;
+  background: #f3f5f4;
   color: inherit;
 }
 .menu-item.danger { color: #9c3b2e; }
 .search {
   flex: 1;
   min-width: 0;
+  margin-left: 56px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -374,7 +382,7 @@ button { cursor: pointer; }
   left: 10px;
   right: 10px;
   bottom: max(10px, env(safe-area-inset-bottom));
-  height: 196px;
+  height: 86px;
   border-radius: 22px;
   padding: 8px 10px 10px;
   display: flex;
@@ -610,12 +618,12 @@ button { cursor: pointer; }
   backdrop-filter: blur(8px);
   position: relative;
 }
-.pin-glass svg { display: block; }
+.pin-emoji { font-size: 30px; line-height: 1; display: block; }
 .pin.is-dim { opacity: 0.42; }
-.pin.is-active .pin-glass { background: var(--tint); border-color: transparent; }
-.pin.is-active .pin-glass svg path,
-.pin.is-active .pin-glass svg circle { fill: white; stroke: white; }
-.pin.is-active .pin-glass svg path[fill="none"] { fill: none; }
+.pin.is-active .pin-glass {
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 0 0 2px var(--tint), 0 10px 18px rgba(30, 40, 50, 0.16);
+}
 .pin em {
   position: absolute;
   left: 46px;
@@ -671,7 +679,7 @@ button { cursor: pointer; }
   line-height: 36px !important;
   backdrop-filter: blur(10px);
 }
-.leaflet-bottom.leaflet-right { margin-bottom: 190px; }
+.leaflet-bottom.leaflet-right { margin-bottom: 100px; }
 .leaflet-control-attribution {
   background: rgba(255, 255, 255, 0.7) !important;
   backdrop-filter: blur(8px);
