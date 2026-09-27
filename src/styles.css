@@ -688,7 +688,65 @@ button { cursor: pointer; }
 }
 
 .desk { width: min(980px, 100%); margin: 0 auto; padding: 20px 16px 48px; }
-.desk-top { margin-bottom: 8px; }
+.desk-top {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-height: 48px;
+  margin-bottom: 8px;
+}
+.easy-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 960;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  padding:
+    max(16px, env(safe-area-inset-top))
+    20px
+    max(24px, env(safe-area-inset-bottom));
+}
+.easy-top {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: flex-end;
+}
+.easy-card {
+  position: relative;
+  z-index: 1;
+  align-self: center;
+  justify-self: center;
+  width: min(440px, 100%);
+  border-radius: 32px;
+  padding: 28px 22px 22px;
+  text-align: center;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+}
+.easy-qty {
+  margin: 10px 0 0;
+  font-family: Fraunces, serif;
+  font-size: clamp(96px, 28vw, 168px);
+  font-weight: 560;
+  letter-spacing: -0.05em;
+  line-height: 0.85;
+}
+.easy-unit { margin: 6px 0 0; font-size: 22px; color: #52616c; }
+.easy-card h1 { margin: 12px 0 0; font-size: clamp(32px, 6vw, 48px); }
+.easy-who { margin: 6px 0 0; color: #52616c; font-size: 18px; }
+.easy-more { margin: 10px 0 0; }
+.easy-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  width: 100%;
+  margin-top: 28px;
+}
+.easy-actions .btn { padding: 18px 16px; font-size: 18px; }
+.btn-decline { background: #9c3b2e; color: #fff; }
+.btn-decline:hover { background: #863226; }
 .hero {
   position: relative;
   height: 230px;
@@ -766,6 +824,75 @@ button { cursor: pointer; }
 .flash { margin: 0; color: #3f6b46; font-size: 14px; }
 .shelf-note { font-size: 14px; }
 
+.ask-launch {
+  position: absolute;
+  z-index: 780;
+  right: max(14px, env(safe-area-inset-right));
+  bottom: max(14px, env(safe-area-inset-bottom));
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: #1e2830;
+  color: #f6f3ee;
+  box-shadow: 0 10px 24px rgba(30, 40, 50, 0.22);
+}
+.ask-launch svg { width: 26px; height: 26px; display: block; }
+.chat {
+  position: absolute;
+  z-index: 820;
+  left: 12px;
+  right: 12px;
+  top: 72px;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  border-radius: 28px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 14px 14px 12px;
+}
+.chat-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.chat-top h2 { margin: 0; font-size: 28px; }
+.chat-log {
+  flex: 1;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  margin: 12px 0;
+  min-height: 0;
+}
+.bubble { max-width: 88%; border-radius: 18px; padding: 10px 12px; }
+.bubble p { margin: 0; white-space: pre-line; }
+.bubble.you { justify-self: end; background: #1e2830; color: #f6f3ee; }
+.bubble.sat { justify-self: start; background: rgba(255, 255, 255, 0.78); }
+.chat-places { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.chat-places button {
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #1e2830;
+  color: #f6f3ee;
+  font-size: 13px;
+}
+.bubble.you .chat-places button { background: #f6f3ee; color: #1e2830; }
+.chat-starters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.chat-wait { margin: 0; }
+.chat-form { display: flex; gap: 8px; align-items: center; }
+.chat-form input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 999px;
+  padding: 12px 14px;
+}
+.chat-form .btn { flex: none; }
+.chat-form .btn:disabled { opacity: 0.45; }
+
 @media (min-width: 720px) {
   .role-grid { grid-template-columns: 1fr 1fr; }
   .stat-grid { grid-template-columns: repeat(4, 1fr); }
@@ -780,6 +907,13 @@ button { cursor: pointer; }
     border-radius: 28px;
   }
   .has-sheet .rail { visibility: visible; }
+  .chat {
+    left: auto;
+    width: min(420px, 38vw);
+    top: 16px;
+    right: 16px;
+    bottom: 16px;
+  }
   .split { grid-template-columns: 1.15fr 0.85fr; align-items: start; }
 }
 @media (max-width: 859px) {

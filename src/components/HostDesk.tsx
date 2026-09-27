@@ -2,13 +2,68 @@ import { useMemo, useState } from 'react'
 import { countryById } from '../data'
 import { ago, money } from '../format'
 import { useSat } from '../store'
+import type { Order } from '../types'
 import { Menu } from './Menu'
 import { Photo } from './Photo'
 import { Stitch } from './Mark'
 
+function unitLabel(qty: number, unit: string) {
+  if (qty === 1 || unit.endsWith('s')) return unit
+  return `${unit}s`
+}
+
+function EasyOrders({
+  orders,
+  onDecide,
+  onDetails,
+}: {
+  orders: Order[]
+  onDecide: (orderId: string, status: 'accepted' | 'declined') => void
+  onDetails: () => void
+}) {
+  const order = orders[0]
+
+  return (
+    <main className="easy-screen">
+      <div className="home-bg" />
+      <div className="home-veil home-veil-strong" />
+      <header className="easy-top">
+        <button type="button" className="btn btn-primary" onClick={onDetails}>
+          Details mode
+        </button>
+      </header>
+      {order ? (
+        <section className="easy-card glass" key={order.id}>
+          <p className="role-kicker">New order</p>
+          <p className="easy-qty">{order.qty}</p>
+          <p className="easy-unit">{unitLabel(order.qty, order.unit)}</p>
+          <h1>{order.productName}</h1>
+          <p className="easy-who">{order.travelerName}</p>
+          {orders.length > 1 && <p className="muted easy-more">{orders.length - 1} more waiting</p>}
+          <div className="easy-actions">
+            <button type="button" className="btn btn-decline" onClick={() => onDecide(order.id, 'declined')}>
+              Decline
+            </button>
+            <button type="button" className="btn btn-sage" onClick={() => onDecide(order.id, 'accepted')}>
+              Accept
+            </button>
+          </div>
+        </section>
+      ) : (
+        <section className="easy-card glass">
+          <p className="role-kicker">New orders</p>
+          <h1>You’re clear</h1>
+          <p className="muted">New orders will show up here.</p>
+        </section>
+      )}
+    </main>
+  )
+}
+
 export function HostDesk({ onMap }: { onMap: () => void }) {
   const { user, places, orders, decide } = useSat()
   const [note, setNote] = useState('')
+  const [easy, setEasy] = useState(false)
   const place = places.find((item) => item.id === user?.placeId)
   const country = countryById(user?.country ?? place?.country ?? 'ge')
 
@@ -53,6 +108,10 @@ export function HostDesk({ onMap }: { onMap: () => void }) {
 
   if (!user) return null
 
+  if (easy) {
+    return <EasyOrders orders={pending} onDecide={decide} onDetails={() => setEasy(false)} />
+  }
+
   return (
     <main className="desk-screen">
       <div className="home-bg" />
@@ -60,6 +119,9 @@ export function HostDesk({ onMap }: { onMap: () => void }) {
       <div className="desk">
         <header className="desk-top">
           <Menu onMap={onMap} />
+          <button type="button" className="btn btn-primary" onClick={() => setEasy(true)}>
+            Easy mode
+          </button>
         </header>
 
         <section className="hero">

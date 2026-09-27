@@ -5,6 +5,7 @@ import { CLOSE_KM, distanceToRoute, downsample, fetchRoute, haversine, ON_THE_WA
 import { readHere, watchHere } from '../locate'
 import { useSat } from '../store'
 import { categories, type CategoryId, type Destination, type LatLng, type Role } from '../types'
+import { Ask } from './Ask'
 import { CategoryIcon } from './Icons'
 import { Menu } from './Menu'
 import { Photo } from './Photo'
@@ -511,6 +512,17 @@ export function Traveler({ onJoin, onDesk }: { onJoin: (role: Role) => void; onD
           </ul>
         </aside>
       )}
+
+      <Ask
+        places={places.filter((place) => place.country === country.id)}
+        here={here}
+        route={route}
+        dest={dest?.label}
+        focusId={activeId}
+        orders={user?.role === 'traveler' ? mine : []}
+        signedIn={user?.role === 'traveler'}
+        onOpenPlace={setActiveId}
+      />
 
       {active && (
         <PlacePanel
