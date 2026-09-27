@@ -17,12 +17,36 @@ type RouteMeta = { km: number; seconds: number; approx: boolean }
 
 export function Traveler({ onJoin, onDesk }: { onJoin: (role: Role) => void; onDesk: () => void }) {
   const { user, places, orders } = useSat()
-  const country = countryById(user?.country ?? 'ge')
+  const country = countryById(user?.country ?? 'md')
   const [here, setHere] = useState<LatLng>(country.start)
   const [live, setLive] = useState(false)
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
+  const searchInput = useRef<HTMLInputElement>(null)
+  const [searchBounds, setSearchBounds] = useState({ top: 120, height: 320 })
+
+  useEffect(() => {
+    if (!open) return
+    const viewport = window.visualViewport
+    const update = () => {
+      const bottom = searchInput.current?.closest('header')?.getBoundingClientRect().bottom ?? 110
+      const top = bottom + 10
+      const visibleBottom = (viewport?.height ?? window.innerHeight) + (viewport?.offsetTop ?? 0)
+      setSearchBounds({ top, height: Math.max(0, visibleBottom - top - 16) })
+    }
+    update()
+    viewport?.addEventListener('resize', update)
+    viewport?.addEventListener('scroll', update)
+    window.addEventListener('resize', update)
+    return () => {
+      viewport?.removeEventListener('resize', update)
+      viewport?.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
+    }
+  }, [open])
   const [remote, setRemote] = useState<Destination[]>([])
+  const [searching, setSearching] = useState(false)
+  const [searchMessage, setSearchMessage] = useState('')
   const [dest, setDest] = useState<Destination | null>(null)
   const [route, setRoute] = useState<LatLng[]>([])
   const [meta, setMeta] = useState<RouteMeta | null>(null)
@@ -35,6 +59,9 @@ export function Traveler({ onJoin, onDesk }: { onJoin: (role: Role) => void; onD
   const [requestsOpen, setRequestsOpen] = useState(false)
   const [askNotify, setAskNotify] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const routeRequest = useRef(0)
+  const searchRequest = useRef(0)
+  const [locationNote, setLocationNote] = useState('')
   const timer = useRef<number | null>(null)
   const grabY = useRef(0)
   const grabMoved = useRef(false)
@@ -42,6 +69,14 @@ export function Traveler({ onJoin, onDesk }: { onJoin: (role: Role) => void; onD
   const seen = useRef(new Set<string>())
 
   useEffect(() => {
+    routeRequest.current += 1
+    searchRequest.current += 1
+    setSearching(false)
+    setRemote([])
+    setSearchMessage('')
+    setRouting(false)
+    stopRide()
+    setActiveId(null)
     setHere(country.start)
     setLive(false)
     setRoute([])
@@ -49,17 +84,7 @@ export function Traveler({ onJoin, onDesk }: { onJoin: (role: Role) => void; onD
     setMeta(null)
     setQuery('')
     setRider(null)
-    let cancel = false
-    void readHere().then((next) => {
-      if (cancel || !next) return
-      if (haversine(next, country.start) < 450) {
-        setHere(next)
-        setLive(true)
-      }
-    })
-    return () => {
-      cancel = true
-    }
+
   }, [country.id, country.start])
 
   useEffect(() => {
@@ -69,30 +94,21 @@ export function Traveler({ onJoin, onDesk }: { onJoin: (role: Role) => void; onD
     void watchHere((point) => setHere(point)).then((clear) => {
       if (cancelled) clear()
       else stop = clear
-    })
+    }).catch(() => setLive(false))
     return () => {
       cancelled = true
       stop()
     }
   }, [live])
 
-  useEffect(() => {
-    const q = query.trim()
-    if (q.length < 3) {
-      setRemote([])
-      return
-    }
-    const handle = window.setTimeout(() => {
-      searchPlaces(q, country.id).then(setRemote).catch(() => setRemote([]))
-    }, 350)
-    return () => window.clearTimeout(handle)
-  }, [query, country.id])
 
   useEffect(() => {
     return () => {
       if (timer.current) window.clearTimeout(timer.current)
     }
   }, [])
+
+  useEffect(() => { setPicked(user?.categories ?? []) }, [user?.id])
 
   const filter = picked.length ? picked : categories.map((cat) => cat.id)
   const inCountry = useMemo(
@@ -112,10 +128,13 @@ export function Traveler({ onJoin, onDesk }: { onJoin: (role: Role) => void; onD
 
   const list = useMemo(() => {
     if (route.length < 2) return [...mapped].sort((a, b) => a.km - b.km)
+    if (dest?.stopIds?.length) {
+      const planned = dest.stopIds.flatMap(id => mapped.filter(row => row.place.id === id))
+      return [...planned, ...mapped.filter(row => row.onRoad && !dest.stopIds!.includes(row.place.id)).sort((a,b) => a.along - b.along)]
+    }
     const along = mapped.filter((row) => row.onRoad).sort((a, b) => a.along - b.along)
-    if (along.length) return along
-    return [...mapped].sort((a, b) => a.km - b.km).slice(0, 3)
-  }, [mapped, route.length])
+    return along
+  }, [mapped, route.length, dest])
 
   useEffect(() => {
     const point = rider ?? (live ? here : null)
@@ -131,9 +150,7 @@ export function Traveler({ onJoin, onDesk }: { onJoin: (role: Role) => void; onD
       if (route.length > 1 && !row.onRoad) continue
       seen.current.add(row.place.id)
       setNotices((prev) => [{ id: `${row.place.id}-${Date.now()}`, placeId: row.place.id, km: near }, ...prev].slice(0, 2))
-      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        new Notification('A place is close', { body: `${row.place.name} · ${row.place.village}` })
-      }
+      // Nearby discoveries are shown in-app, including on iOS.
       break
     }
   }, [rider, here, live, mapped, route])
@@ -142,10 +159,10 @@ export function Traveler({ onJoin, onDesk }: { onJoin: (role: Role) => void; onD
   const journeyHits = journeys
     .filter((item) => item.country === country.id)
     .filter((item) => !q || item.label.toLowerCase().includes(q) || item.detail.toLowerCase().includes(q))
-    .slice(0, 6)
+    .slice(0, 12)
   const placeHits = q
     ? inCountry
-        .filter((place) => place.name.toLowerCase().includes(q) || place.village.toLowerCase().includes(q))
+        .filter((place) => place.name.toLowerCase().includes(q))
         .slice(0, 4)
     : []
   const active = mapped.find((row) => row.place.id === activeId) ?? null
@@ -183,35 +200,50 @@ export function Traveler({ onJoin, onDesk }: { onJoin: (role: Role) => void; onD
     setSheetOpen(false)
   }
 
-  async function go(next: Destination) {
+  async function go(next: Destination, openDetails = true) {
+    searchRequest.current += 1
+    setSearching(false)
+    setSearchMessage('')
+    searchInput.current?.blur()
+    const request = ++routeRequest.current
     setDest(next)
     setQuery(next.label)
     setOpen(false)
     setRouting(true)
+    setRoute([])
+    setMeta(null)
+    setSheetOpen(false)
+    setPicked([])
+    setActiveId(null)
     stopRide()
     seen.current.clear()
     setNotices([])
-    if (typeof Notification !== 'undefined' && Notification.permission === 'default' && localStorage.getItem('sat-notify') !== 'no') {
-      setAskNotify(true)
-    }
+
+    const planned = (next.stopIds ?? []).map(id => places.find(p => p.id === id)).filter((p): p is NonNullable<typeof p> => !!p)
+    const via = planned.slice(0, -1)
+    const checkpoints = [here, ...via, next]
+    const fallbackLine = () => checkpoints.slice(1).flatMap((point, i) => straightLine(checkpoints[i], point))
+    const fallbackKm = () => checkpoints.slice(1).reduce((sum, point, i) => sum + haversine(checkpoints[i], point), 0)
     try {
-      const found = await fetchRoute(here, next)
+      const found = await fetchRoute(here, next, via)
+      if (request !== routeRequest.current) return
       if (found) {
         setRoute(found.line)
         setMeta({ km: found.meters / 1000, seconds: found.seconds, approx: false })
       } else {
-        const km = haversine(here, next)
-        setRoute(straightLine(here, next))
+        const km = fallbackKm()
+        setRoute(fallbackLine())
         setMeta({ km, seconds: (km / 55) * 3600, approx: true })
       }
     } catch {
-      const km = haversine(here, next)
-      setRoute(straightLine(here, next))
+      if (request !== routeRequest.current) return
+      const km = fallbackKm()
+      setRoute(fallbackLine())
       setMeta({ km, seconds: (km / 55) * 3600, approx: true })
     } finally {
-      setRouting(false)
+      if (request === routeRequest.current) setRouting(false)
     }
-    if (next.placeId) setActiveId(next.placeId)
+    if (request === routeRequest.current && next.placeId && openDetails) setActiveId(next.placeId)
   }
 
   function toggle(id: CategoryId) {
@@ -236,11 +268,11 @@ export function Traveler({ onJoin, onDesk }: { onJoin: (role: Role) => void; onD
     const dy = event.clientY - grabY.current
     if (dy > 28) setSheetOpen(false)
     else if (dy < -28) setSheetOpen(true)
-    else if (!grabMoved.current) setSheetOpen((open) => !open)
+
   }
 
   return (
-    <div className={`traveler${active ? ' has-sheet' : ''}${sheetOpen ? ' is-list-open' : ''}`}>
+    <div className={`traveler${open ? ' is-searching' : ''}${active ? ' has-sheet' : ''}${sheetOpen ? ' is-list-open' : ''}`}>
       <div className="map-full">
         <RoadMap
           countryId={country.id}
@@ -248,37 +280,63 @@ export function Traveler({ onJoin, onDesk }: { onJoin: (role: Role) => void; onD
           rider={rider}
           route={route}
           places={mapped}
-          activeId={activeId}
-          onSelect={setActiveId}
+          activeId={activeId ?? dest?.placeId ?? null}
+          onSelect={(id) => {
+            const place = places.find((item) => item.id === id)
+            if (place) void go({ label: place.name, detail: place.village, lat: place.lat, lng: place.lng, placeId: place.id }, false)
+          }}
           signature={`${dest?.label ?? 'home'}:${route.length}:${country.id}:${live ? 'live' : 'map'}`}
         />
       </div>
 
       <header className="topbar">
-        <Menu onJoin={onJoin} onRequests={user ? () => setRequestsOpen(true) : undefined} onDesk={user?.role === 'host' ? onDesk : undefined} />
         <form
           className="search glass"
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault()
-            const first = placeHits[0]
+            const first = placeHits.find(place => place.name.toLowerCase() === q)
             if (first) {
               void go({ label: first.name, detail: first.village, lat: first.lat, lng: first.lng, placeId: first.id })
               return
             }
-            const journey = journeyHits[0]
+            const journey = journeyHits.find(item => item.label.toLowerCase() === q)
             if (journey) void go(journey)
-            else if (remote[0]) void go(remote[0])
+            else if (query.trim().length >= 3) {
+              setOpen(true)
+              setRemote([])
+              setSearching(true)
+              setSearchMessage('')
+              const search = query.trim()
+              const request = ++searchRequest.current
+              try {
+                const results = await searchPlaces(search, country.id)
+                if (request !== searchRequest.current) return
+                setRemote(results)
+                if (!results.length) setSearchMessage('No destinations found. Try another town or village.')
+              } catch {
+                if (request === searchRequest.current) setSearchMessage('Could not search places. Check your connection and try again.')
+              } finally {
+                if (request === searchRequest.current) setSearching(false)
+              }
+            }
           }}
         >
           <label className="sr" htmlFor="direction">
             Where are you heading?
           </label>
           <input
+            ref={searchInput}
             id="direction"
+            onKeyDown={event => { if (event.key === 'Escape') { setOpen(false); searchInput.current?.blur() } }}
             value={query}
-            placeholder="Where are you heading?"
+            placeholder="Search places"
             autoComplete="off"
+            enterKeyHint="search"
             onChange={(event) => {
+              searchRequest.current += 1
+              setRemote([])
+              setSearching(false)
+              setSearchMessage('')
               setQuery(event.target.value)
               setOpen(true)
             }}
@@ -286,25 +344,44 @@ export function Traveler({ onJoin, onDesk }: { onJoin: (role: Role) => void; onD
             onFocus={() => setOpen(true)}
             onBlur={() => window.setTimeout(() => setOpen(false), 180)}
           />
+          <button type="submit" className="text-btn search-submit" aria-label={searching ? 'Searching…' : 'Search'} disabled={searching || query.trim().length < 3} onMouseDown={event => event.preventDefault()}>
+            {searching ? '…' : <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></svg>}
+          </button>
           {dest && (
             <button
               type="button"
-              className="text-btn"
+              className="text-btn search-clear"
+              aria-label="Clear route"
               onClick={() => {
+                routeRequest.current += 1
+                setRouting(false)
                 stopRide()
                 setDest(null)
                 setRoute([])
                 setMeta(null)
                 setQuery('')
+                searchRequest.current += 1
+                setRemote([])
+                setSearching(false)
+                setSearchMessage('')
+                setOpen(false)
               }}
             >
-              Clear
+              <span aria-hidden="true">×</span>
             </button>
           )}
           {open && (
-            <div className="suggest glass">
+            <div className="suggest glass" aria-label="Search suggestions" style={{ top: searchBounds.top, maxHeight: searchBounds.height }}>
+              {searching && <p className="muted" role="status">Searching towns and villages…</p>}
+              {searchMessage && <p className="muted" role="status">{searchMessage}</p>}
+              {remote.map((item) => (
+                <button type="button" key={`${item.lat}-${item.lng}`} onMouseDown={event => event.preventDefault()} onClick={() => void go(item)}>
+                  <strong>{item.label}</strong>
+                  <span>Destination · {item.detail}</span>
+                </button>
+              ))}
               {journeyHits.map((item) => (
-                <button type="button" key={`${item.label}-${item.lat}`} onMouseDown={() => void go(item)}>
+                <button type="button" key={`${item.label}-${item.lat}`} onMouseDown={event => event.preventDefault()} onClick={() => void go(item)}>
                   <strong>{item.label}</strong>
                   <span>{item.detail}</span>
                 </button>
@@ -313,7 +390,7 @@ export function Traveler({ onJoin, onDesk }: { onJoin: (role: Role) => void; onD
                 <button
                   type="button"
                   key={place.id}
-                  onMouseDown={() =>
+                  onMouseDown={event => event.preventDefault()} onClick={() =>
                     void go({ label: place.name, detail: place.village, lat: place.lat, lng: place.lng, placeId: place.id })
                   }
                 >
@@ -321,19 +398,16 @@ export function Traveler({ onJoin, onDesk }: { onJoin: (role: Role) => void; onD
                   <span>Place · {place.village}</span>
                 </button>
               ))}
-              {remote.map((item) => (
-                <button type="button" key={`${item.lat}-${item.lng}`} onMouseDown={() => void go(item)}>
-                  <strong>{item.label}</strong>
-                  <span>{item.detail}</span>
-                </button>
-              ))}
-              {q && !journeyHits.length && !placeHits.length && !remote.length && <p className="muted">Nothing under that name yet.</p>}
+              {q && !searching && !searchMessage && !remote.length && <p className="muted">Press Search to find a town or village and products along the way.</p>}
             </div>
           )}
         </form>
+        <button type="button" className="sell-entry" onClick={() => user?.role === 'host' ? onDesk() : onJoin('host')}>
+          {user?.role === 'host' ? 'My shop' : 'Sell'}
+        </button>
       </header>
 
-      <div className="cats">
+      <div className="cats" aria-label="Filter places">
         <button type="button" className={!picked.length || picked.length === categories.length ? 'cat is-on' : 'cat'} onClick={() => setPicked([])}>
           All
         </button>
@@ -350,9 +424,16 @@ export function Traveler({ onJoin, onDesk }: { onJoin: (role: Role) => void; onD
         ))}
       </div>
 
-      <aside className="rail glass">
+      <button className="locate-button glass" aria-label="Locate me" onClick={async () => { setLocationNote('Finding your location…'); const point = await readHere(); if (point && haversine(point,country.start)<450) { setHere(point); setLive(true); setLocationNote(''); } else setLocationNote('Showing the selected area. Location is unavailable or outside this country.'); }}>⌖</button>
+      {locationNote && <p className="location-note" role="status">{locationNote}</p>}
+      <aside className={`rail glass${!dest ? ' has-demo-routes' : ''}`}>
         <div
           className="rail-top"
+          role="button"
+          tabIndex={0}
+          aria-label={sheetOpen ? 'Collapse places' : 'Expand places'}
+          aria-expanded={sheetOpen}
+          onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setSheetOpen(value => !value) } }}
           onPointerDown={onGrabDown}
           onPointerMove={onGrabMove}
           onPointerUp={onGrabUp}
@@ -367,7 +448,7 @@ export function Traveler({ onJoin, onDesk }: { onJoin: (role: Role) => void; onD
         <div className="rail-grab" />
         <div className="rail-head">
           <div>
-            <h2>{route.length > 1 ? 'On this road' : `In ${country.name}`}</h2>
+            <h2>{dest?.placeId ? 'Directions' : route.length > 1 ? 'Products on the way' : `In ${country.name}`}</h2>
             <p>
               {routing && 'Drawing the road…'}
               {!routing && meta && (
@@ -380,16 +461,20 @@ export function Traveler({ onJoin, onDesk }: { onJoin: (role: Role) => void; onD
             </p>
           </div>
           {route.length > 1 && !routing && (
-            <button type="button" className={riding ? 'go-btn is-on' : 'go-btn'} onPointerDown={(event) => event.stopPropagation()} onClick={riding ? stopRide : startRide}>
+            <button type="button" className={riding ? 'go-btn is-on' : 'go-btn'} onPointerDown={(event) => event.stopPropagation()} onPointerUp={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); riding ? stopRide() : startRide() }}>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path fill="currentColor" d="M3.8 10.8 20.2 3.6l-7.2 16.4-2.1-6.7-7.1-2.5z" />
               </svg>
-              {riding ? 'End' : 'Start'}
+              {riding ? 'End preview' : 'Preview'}
             </button>
           )}
         </div>
+        {!sheetOpen && <p className="rail-pull-hint">Pull up to explore ↑</p>}
         </div>
-        {quietRoad && <p className="muted rail-note">Nothing sits on this line. The nearest places are still listed.</p>}
+        {dest && <p className="route-demo-note">From {live ? 'your location' : country.start.label}{dest.placeId && <> · <button type="button" className="text-btn" onClick={() => setActiveId(dest.placeId!)}>View seller</button></>}</p>}
+        {!dest && <div className="demo-routes" aria-label="Suggested routes">{journeys.filter(j => j.country === country.id && j.stopIds).map(j => <button key={j.label} onClick={() => void go(j)}><strong>{j.label}</strong><span>{j.stopIds!.length} stops · road trip</span></button>)}</div>}
+        {dest?.stopIds && <p className="route-demo-note">Road itinerary · {dest.stopIds.length} planned stops · check access locally</p>}
+        {quietRoad && <p className="muted rail-note">No matching sellers near this route. Try another category or destination.</p>}
         <div
           className="rail-list"
           onWheel={(event: WheelEvent<HTMLDivElement>) => {
@@ -403,7 +488,10 @@ export function Traveler({ onJoin, onDesk }: { onJoin: (role: Role) => void; onD
             if (!sheetOpen && dy < -18) setSheetOpen(true)
           }}
         >
-          {list.map((row) => (
+          {list.length === 0 && !quietRoad && <p className="muted">No places match these filters. Try All.</p>}
+          {list.map((row) => {
+            const product = route.length > 1 ? row.place.products.find(item => filter.includes(item.category)) : undefined
+            return (
             <button
               key={row.place.id}
               type="button"
@@ -411,24 +499,27 @@ export function Traveler({ onJoin, onDesk }: { onJoin: (role: Role) => void; onD
               onClick={() => setActiveId(row.place.id)}
             >
               <span className="card-photo">
-                <Photo src={row.place.cover} alt="" />
+                <Photo src={product?.image ?? row.place.cover} alt="" />
               </span>
               <span>
-                <strong>{row.place.name}</strong>
+                <strong>{product?.name ?? row.place.name}</strong>
                 <em>
-                  {row.place.village} · {row.place.categories[0]}
+                  {row.place.village} · {product ? row.place.name : row.place.categories[0]}
                 </em>
                 <small>
                   {route.length > 1
                     ? row.onRoad
-                      ? `On the way · ${formatKm(row.km)}`
+                      ? `${formatKm(row.km)} from ${meta?.approx ? 'direct line' : 'route'}`
                       : `A little off · ${formatKm(row.km)}`
                     : formatKm(row.km)}
                 </small>
               </span>
-              <b>{row.place.reviews ? row.place.rating.toFixed(1) : 'New'}</b>
+              <b>{product ? <>{money(country.currency, product.price)}<small> / {product.unit}</small></> : row.place.reviews ? row.place.rating.toFixed(1) : 'New'}</b>
             </button>
-          ))}
+          )})}
+        </div>
+        <div className="rail-account">
+          <Menu inline onJoin={onJoin} onRequests={user ? () => setRequestsOpen(true) : undefined} onDesk={user?.role === 'host' ? onDesk : undefined} />
         </div>
       </aside>
 

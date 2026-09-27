@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { countryById } from '../data'
 import { formatKm, money } from '../format'
 import { useSat } from '../store'
@@ -31,6 +31,9 @@ export function PlacePanel({
   routed: boolean
   onClose: () => void
 }) {
+  const dragStart = useRef<number | null>(null)
+  const dialog = useRef<HTMLDialogElement>(null)
+  useEffect(() => { dialog.current?.showModal() }, [])
   const { user, orders, placeOrder } = useSat()
   const [productId, setProductId] = useState(place.products[0]?.id ?? '')
   const [qty, setQty] = useState(1)
@@ -58,8 +61,9 @@ export function PlacePanel({
   const traveler = user?.role === 'traveler' ? user : null
 
   return (
-    <aside className="sheet glass" role="dialog" aria-label={place.name}>
-      <div className="sheet-cover">
+    <dialog ref={dialog} className="sheet glass place-dialog" aria-label={place.name} onCancel={onClose}>
+      <div className="sheet-cover" onPointerDown={event => { dragStart.current = event.clientY }} onPointerUp={event => { if (dragStart.current !== null && event.clientY - dragStart.current > 70) onClose(); dragStart.current = null }}>
+        <span className="detail-grabber" aria-hidden="true"/>
         <Photo src={place.cover} alt="" />
         <button type="button" className="close" onClick={onClose}>
           Close
@@ -146,7 +150,7 @@ export function PlacePanel({
               </span>
             </div>
             {sent ? (
-              <p className="sent">Sent to {place.hostName}. It is waiting on the desk.</p>
+              <p className="sent">Request saved on this device.</p>
             ) : (
               <button
                 type="button"
@@ -168,9 +172,9 @@ export function PlacePanel({
             )}
           </>
         ) : (
-          <p className="muted">Choose Travel in the menu to request this.</p>
+          <p className="muted">Create a traveler profile in the Sat menu to send a request.</p>
         )}
       </footer>
-    </aside>
+    </dialog>
   )
 }

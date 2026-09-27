@@ -9,9 +9,15 @@ import {
   seedOrders,
 } from './data'
 import { uid } from './format'
-import type { CategoryId, Order, OrderStatus, Place, Role, User } from './types'
+import type { CategoryId, Order, OrderStatus, Place, Product, Role, User } from './types'
 
 const KEY = 'sat.v1'
+
+export function resetDemo() {
+  localStorage.removeItem(KEY)
+  localStorage.removeItem('sat-notify')
+  window.location.reload()
+}
 
 type Snapshot = {
   user: User | null
@@ -42,6 +48,8 @@ type Store = {
   user: User | null
   places: Place[]
   orders: Order[]
+  simulateOrder: () => string | null
+  addProduct: (product: Omit<Product, 'id'>) => void
   register: (input: RegisterInput) => void
   enterDemo: (role: Role) => void
   logout: () => void
@@ -58,8 +66,12 @@ function load(): Snapshot {
     const data = JSON.parse(raw) as Partial<Snapshot>
     return {
       user: data.user ?? null,
-      orders: Array.isArray(data.orders) ? data.orders : seedOrders,
-      customPlaces: Array.isArray(data.customPlaces) ? data.customPlaces : [],
+      orders: Array.isArray(data.orders) ? data.orders.map(order => ({
+        ...order, travelerName: order.travelerName === 'Alex · Demo visitor' ? 'Alex' : order.travelerName,
+      })) : seedOrders,
+      customPlaces: Array.isArray(data.customPlaces) ? data.customPlaces.map(place => ({
+        ...place, name: place.name.replace(/’s demo place$/, '’s place'),
+      })) : [],
     }
   } catch {
     return { user: null, orders: seedOrders, customPlaces: [] }
@@ -70,11 +82,11 @@ export function SatProvider({ children }: { children: ReactNode }) {
   const [snap, setSnap] = useState<Snapshot>(load)
 
   useEffect(() => {
-    localStorage.setItem(KEY, JSON.stringify(snap))
+    try { localStorage.setItem(KEY, JSON.stringify(snap)) } catch { /* Keep this session usable if storage is unavailable. */ }
   }, [snap])
 
   const places = useMemo(
-    () => [...seedPlaces, ...snap.customPlaces],
+    () => [...seedPlaces.filter(place => !snap.customPlaces.some(custom => custom.id === place.id)), ...snap.customPlaces],
     [snap.customPlaces],
   )
 
@@ -83,8 +95,34 @@ export function SatProvider({ children }: { children: ReactNode }) {
       user: snap.user,
       places,
       orders: snap.orders,
+      simulateOrder: () => {
+        const place = places.find(p => p.id === snap.user?.placeId && p.hostId === snap.user?.id)
+        const product = place?.products[0]
+        if (!place || !product) return null
+        const id = uid('demo-order')
+        const order: Order = {
+          id, placeId: place.id, hostId: place.hostId, travelerId: 'demo-visitor',
+          travelerName: 'Alex', productName: product.name,
+          customerLocation: { lat: place.lat - 0.025, lng: place.lng + 0.035 }, demoLocation: true,
+          qty: 2, unit: product.unit, total: product.price * 2,
+          currency: countryById(place.country).currency, status: 'pending', createdAt: Date.now(),
+        }
+        setSnap(prev => ({ ...prev, orders: [order, ...prev.orders] }))
+        return id
+      },
+      addProduct: (product) => {
+        setSnap(prev => {
+          const place = [...prev.customPlaces, ...seedPlaces].find(p => p.id === prev.user?.placeId && p.hostId === prev.user.id)
+          if (!place) return prev
+          const products = place.easySetupComplete ? [...place.products, { ...product, id: uid('prod') }] : [{ ...product, id: uid('prod') }]
+          const categories = [...new Set(products.map(p => p.category))]
+          const updated = { ...place, products, categories, cover: products[0].image, easySetupComplete: true }
+          return { ...prev, user: prev.user ? { ...prev.user, categories } : null,
+            customPlaces: [...prev.customPlaces.filter(p => p.id !== place.id), updated] }
+        })
+      },
       register: (input) => {
-        const id = uid(input.role === 'host' ? 'host' : 'traveler')
+        const id = input.role === 'host' && snap.user?.role === 'traveler' ? snap.user.id : uid(input.role === 'host' ? 'host' : 'traveler')
         if (input.role === 'host' && input.placeName && input.areaId) {
           const place = buildPlace({
             hostId: id,

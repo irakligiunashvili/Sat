@@ -2,3 +2,8 @@ node_modules
 dist
 .DS_Store
 *.local
+
+# Local iOS build outputs
+ios/build/
+ios/sim-build/
+**/xcuserdata/

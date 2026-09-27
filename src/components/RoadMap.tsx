@@ -154,7 +154,7 @@ export function RoadMap({
       className="sat-map"
     >
       <TileLayer
-        attribution='&copy; OpenStreetMap'
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <Zoom />

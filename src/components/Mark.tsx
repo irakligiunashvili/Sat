@@ -1,17 +1,5 @@
-export function SatMark({ ink = '#fff', size = 86 }: { ink?: string; size?: number }) {
-  return (
-    <div className="sat-mark" style={{ color: ink, fontSize: size }}>
-      <span>S</span>
-      <svg className="sat-house" viewBox="0 0 70 78" aria-hidden="true">
-        <path
-          fill="currentColor"
-          fillRule="evenodd"
-          d="M35 2 L68 34 H60 V74 H10 V34 H2 Z M18 42 h10 v9 h-10 z M42 42 h10 v9 h-10 z M18 56 h10 v9 h-10 z M42 56 h10 v9 h-10 z"
-        />
-      </svg>
-      <span>t</span>
-    </div>
-  )
+export function SatMark({ size = 86 }: { ink?: string; size?: number }) {
+  return <span className="sat-original-mark" style={{width:size*2.3,height:size*1.5}}><img src="/brand/sat-original.png" alt="Sat" style={{top:-size*0.5}} /></span>
 }
 
 export function Stitch({ line = 'rgba(255,255,255,0.8)' }: { line?: string }) {

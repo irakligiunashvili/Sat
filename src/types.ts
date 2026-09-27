@@ -30,6 +30,7 @@ export type Comment = {
 }
 
 export type Place = {
+  easySetupComplete?: boolean
   id: string
   hostId: string
   hostName: string
@@ -51,6 +52,8 @@ export type Place = {
 export type OrderStatus = 'pending' | 'accepted' | 'declined'
 
 export type Order = {
+  customerLocation?: LatLng
+  demoLocation?: boolean
   id: string
   placeId: string
   hostId: string
@@ -78,6 +81,7 @@ export type User = {
 export type LatLng = { lat: number; lng: number }
 
 export type Destination = {
+  stopIds?: string[]
   label: string
   detail: string
   lat: number

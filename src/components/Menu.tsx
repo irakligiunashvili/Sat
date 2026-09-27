@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { countryById } from '../data'
-import { useSat } from '../store'
+import { resetDemo, useSat } from '../store'
 import type { Role } from '../types'
 import { SatMark } from './Mark'
 
@@ -9,15 +10,18 @@ export function Menu({
   onRequests,
   onDesk,
   onMap,
+  inline = false,
 }: {
   onJoin?: (role: Role) => void
   onRequests?: () => void
   onDesk?: () => void
   onMap?: () => void
+  inline?: boolean
 }) {
   const { user, places, logout } = useSat()
   const [open, setOpen] = useState(false)
-  const country = countryById(user?.country ?? 'ge')
+  const [resetError, setResetError] = useState('')
+  const country = countryById(user?.country ?? 'md')
   const place = places.find((item) => item.id === user?.placeId)
 
   function close() {
@@ -26,15 +30,15 @@ export function Menu({
 
   return (
     <>
-      <button type="button" className="menu-btn glass" aria-label="Menu" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-        <i />
-        <i />
-        <i />
+      <button type="button" className={inline ? "menu-inline" : "menu-btn glass"} aria-label="Menu" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+        {inline ? 'Account & menu' : <SatMark size={21} />}
       </button>
-      {open && (
+      {open && createPortal(
         <>
           <button type="button" className="menu-backdrop" aria-label="Close menu" onClick={close} />
           <div className="menu-panel">
+            <button type="button" className="text-btn" onClick={close}>Close menu</button>
+            <p className="demo-label">Saved on this device</p>
             <div className="menu-logo">
               <SatMark ink="#1e2830" size={34} />
             </div>
@@ -42,7 +46,7 @@ export function Menu({
               <div className="menu-profile">
                 <strong>{user.name}</strong>
                 <span>{user.role === 'host' ? 'Host' : 'Traveler'} · {country.name}</span>
-                <span>{place ? place.name : user.email}</span>
+                <span>{place ? place.name : 'Traveler'}</span>
               </div>
             ) : (
               <p className="muted menu-lead">How are you using Sat?</p>
@@ -67,7 +71,7 @@ export function Menu({
                     onJoin('host')
                   }}
                 >
-                  Host a place
+                  Sell
                 </button>
               </>
             )}
@@ -119,8 +123,16 @@ export function Menu({
                 Sign out
               </button>
             )}
+            <details className="demo-tools">
+              <summary>Demo tools</summary>
+              <p>Clear your profile, added products and orders on this device. Restart with the original sample data and empty forms.</p>
+              <button type="button" className="menu-item danger" onClick={() => {
+                try { resetDemo() } catch { setResetError('Could not clear saved data. Please try again.') }
+              }}>Reset demo</button>
+              {resetError && <p className="error" role="alert">{resetError}</p>}
+            </details>
           </div>
-        </>
+        </>, document.body
       )}
     </>
   )

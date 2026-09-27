@@ -9,19 +9,20 @@ export function App() {
   const { user } = useSat()
   const [role, setRole] = useState<Role | null>(null)
   const [desk, setDesk] = useState(false)
-  const prevId = useRef(user?.id)
+  const prevRole = useRef(user?.role)
 
   useEffect(() => {
-    if (!prevId.current && user?.role === 'host') setDesk(true)
+    if (prevRole.current !== 'host' && user?.role === 'host') setDesk(true)
     if (!user) setDesk(false)
-    prevId.current = user?.id
+    else setRole(null)
+    prevRole.current = user?.role
   }, [user])
 
   if (user?.role === 'host' && desk) return <HostDesk onMap={() => setDesk(false)} />
   return (
     <>
       <Traveler onJoin={setRole} onDesk={() => setDesk(true)} />
-      {role && !user && <Join role={role} onBack={() => setRole(null)} />}
+      {role && (!user || (role === 'host' && user.role === 'traveler')) && <Join role={role} onBack={() => setRole(null)} />}
     </>
   )
 }

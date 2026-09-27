@@ -1,11 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { countryById } from '../data'
 import { ago, money } from '../format'
 import { useSat } from '../store'
 import type { Order } from '../types'
+import { OrderArrival } from './OrderArrival'
+import { EasySelling } from './EasySelling'
 import { Menu } from './Menu'
 import { Photo } from './Photo'
-import { Stitch } from './Mark'
+import { Stitch, SatMark } from './Mark'
 
 function unitLabel(qty: number, unit: string) {
   if (qty === 1 || unit.endsWith('s')) return unit
@@ -16,35 +18,62 @@ function EasyOrders({
   orders,
   onDecide,
   onDetails,
+  onAdd,
+  onMap,
 }: {
   orders: Order[]
   onDecide: (orderId: string, status: 'accepted' | 'declined') => void
+  onAdd: () => void
   onDetails: () => void
+  onMap: () => void
 }) {
-  const order = orders[0]
+  const { simulateOrder, places } = useSat()
+  const [acceptedOrder, setAcceptedOrder] = useState<Order | null>(null)
+  const simulate = useRef(simulateOrder)
+  simulate.current = simulateOrder
+  const [waiting, setWaiting] = useState(true)
+  const [arrival, setArrival] = useState<string | null>(null)
+  const [demoRun, setDemoRun] = useState(0)
+  useEffect(() => {
+    setWaiting(true)
+    setArrival(null)
+    const timer = window.setTimeout(() => {
+      setArrival(simulate.current())
+      setWaiting(false)
+    }, 6000)
+    return () => window.clearTimeout(timer)
+  }, [demoRun])
+  const order = waiting ? undefined : orders.find(item => item.id === arrival)
 
   return (
     <main className="easy-screen">
       <div className="home-bg" />
       <div className="home-veil home-veil-strong" />
       <header className="easy-top">
+        <button type="button" className="text-btn" onClick={onMap}>← Back to map</button>
+        <button type="button" className="btn btn-primary" onClick={onAdd}>Add something to sell</button>
         <button type="button" className="btn btn-primary" onClick={onDetails}>
-          Details mode
+          Expert mode
         </button>
       </header>
-      {order ? (
-        <section className="easy-card glass" key={order.id}>
+      <div className="demo-arrival-status" role="status" aria-live="polite">
+        {waiting ? <span className="order-waiting">An order is on its way…</span> :
+          <button type="button" className="text-btn" onClick={() => setDemoRun(run => run + 1)}>Show another order</button>}
+      </div>
+      {acceptedOrder ? <OrderArrival order={acceptedOrder} place={places.find(p => p.id === acceptedOrder.placeId)} onDone={() => setAcceptedOrder(null)} /> : order ? (
+        <section className={order.id === arrival ? "easy-card glass order-arrived" : "easy-card glass"} key={order.id}>
+          {order.id === arrival && <p className="arrival-banner" role="status">A new order just arrived!</p>}
           <p className="role-kicker">New order</p>
           <p className="easy-qty">{order.qty}</p>
           <p className="easy-unit">{unitLabel(order.qty, order.unit)}</p>
           <h1>{order.productName}</h1>
           <p className="easy-who">{order.travelerName}</p>
-          {orders.length > 1 && <p className="muted easy-more">{orders.length - 1} more waiting</p>}
+
           <div className="easy-actions">
             <button type="button" className="btn btn-decline" onClick={() => onDecide(order.id, 'declined')}>
               Decline
             </button>
-            <button type="button" className="btn btn-sage" onClick={() => onDecide(order.id, 'accepted')}>
+            <button type="button" className="btn btn-sage" onClick={() => { onDecide(order.id, 'accepted'); setAcceptedOrder(order) }}>
               Accept
             </button>
           </div>
@@ -62,8 +91,9 @@ function EasyOrders({
 
 export function HostDesk({ onMap }: { onMap: () => void }) {
   const { user, places, orders, decide } = useSat()
+  const [adding, setAdding] = useState(false)
   const [note, setNote] = useState('')
-  const [easy, setEasy] = useState(false)
+  const [mode, setMode] = useState<'easy' | 'expert' | null>(null)
   const place = places.find((item) => item.id === user?.placeId)
   const country = countryById(user?.country ?? place?.country ?? 'ge')
 
@@ -108,8 +138,37 @@ export function HostDesk({ onMap }: { onMap: () => void }) {
 
   if (!user) return null
 
-  if (easy) {
-    return <EasyOrders orders={pending} onDecide={decide} onDetails={() => setEasy(false)} />
+  if (mode === null) {
+    return (
+      <main className="mode-choice">
+        <header className="mode-choice-head">
+          <button type="button" className="text-btn" onClick={onMap}>Map</button>
+          <SatMark size={44} />
+        </header>
+        <section className="mode-choice-body">
+          <p>Welcome, {user.name}</p>
+          <h1>How would you like to use Sat?</h1>
+          <p>You can switch modes anytime.</p>
+          <div className="mode-choice-options">
+            <button type="button" className="mode-option mode-option-easy" onClick={() => setMode('easy')}>
+              <strong>Easy mode</strong>
+              <span>One order at a time. Big buttons. Keep it simple.</span>
+            </button>
+            <button type="button" className="mode-option" onClick={() => setMode('expert')}>
+              <strong>Expert mode</strong>
+              <span>Your full dashboard with orders, products and sales.</span>
+            </button>
+          </div>
+        </section>
+      </main>
+    )
+  }
+
+  if (mode === 'easy' && place && (!place.easySetupComplete || adding)) {
+    return <EasySelling currency={country.currency} onBack={() => { setAdding(false); setMode(null) }} onDone={() => setAdding(false)} />
+  }
+  if (mode === 'easy') {
+    return <EasyOrders onMap={onMap} onAdd={() => setAdding(true)} orders={pending} onDecide={decide} onDetails={() => setMode('expert')} />
   }
 
   return (
@@ -119,7 +178,9 @@ export function HostDesk({ onMap }: { onMap: () => void }) {
       <div className="desk">
         <header className="desk-top">
           <Menu onMap={onMap} />
-          <button type="button" className="btn btn-primary" onClick={() => setEasy(true)}>
+          <button type="button" className="text-btn" onClick={onMap}>← Back to map</button>
+
+          <button type="button" className="btn btn-primary" onClick={() => setMode('easy')}>
             Easy mode
           </button>
         </header>

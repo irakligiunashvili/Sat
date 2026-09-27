@@ -90,9 +90,10 @@ type OsrmResponse = {
 const osrmBase = import.meta.env.DEV ? '/osrm' : 'https://router.project-osrm.org'
 const nominatimBase = import.meta.env.DEV ? '/nominatim' : 'https://nominatim.openstreetmap.org'
 
-export async function fetchRoute(from: LatLng, to: LatLng) {
-  const url = `${osrmBase}/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`
-  const res = await fetch(url)
+export async function fetchRoute(from: LatLng, to: LatLng, via: LatLng[] = []) {
+  const coordinates = [from, ...via, to].map(p => `${p.lng},${p.lat}`).join(';')
+  const url = `${osrmBase}/route/v1/driving/${coordinates}?overview=full&geometries=geojson`
+  const res = await fetch(url, { signal: AbortSignal.timeout(10000) })
   if (!res.ok) return null
   const data = (await res.json()) as OsrmResponse
   const route = data.routes?.[0]
@@ -108,7 +109,7 @@ type NominatimRow = { display_name: string; lat: string; lon: string }
 
 export async function searchPlaces(q: string, country: string) {
   const url = `${nominatimBase}/search?format=jsonv2&limit=5&countrycodes=${country}&q=${encodeURIComponent(q)}`
-  const res = await fetch(url)
+  const res = await fetch(url, { signal: AbortSignal.timeout(10000) })
   if (!res.ok) return []
   const data = (await res.json()) as NominatimRow[]
   return data
